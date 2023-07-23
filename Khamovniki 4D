@@ -1,0 +1,1294 @@
+using System;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
+using Excel = Microsoft.Office.Interop.Excel;
+using System.Linq;
+using System.IO;
+using System.Windows.Forms;
+using System.Data;
+
+namespace WFA
+{
+    public partial class Form1 : Form
+    {
+        Excel.Application excel;
+        Excel.Workbook workbook;
+        Excel.Worksheet sheet;
+
+        List<string> wholeText = new List<string>().ToList();
+
+        List<string> literNames = new List<string>();
+        List<string> allTextsNew = File.ReadAllLines("allTextsBulgNew.txt").ToList();
+
+        public Form1()
+        {
+            InitializeComponent();
+            excel = new Excel.Application();
+            excel.Workbooks.Add();
+            workbook = excel.Workbooks[1];
+            sheet = workbook.Worksheets.get_Item(1);
+            excel.SheetsInNewWorkbook = 1;
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            while (listBox3.SelectedIndex >= 0)
+            {
+                listBox3.Items.RemoveAt(listBox3.SelectedIndex);
+            }                  
+        }
+
+        private void выборФайлаToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            button4.Enabled = true;
+            OpenFileDialog loadFile = new OpenFileDialog();
+            loadFile.Filter = "Текстовые файлы|*.txt";
+            if (loadFile.ShowDialog() == DialogResult.OK)
+            {
+                wholeText = File.ReadAllLines(loadFile.FileName).ToList();
+            }
+
+            // замена кавычек и М.А. -> Булгаков
+
+            char[] quotation = new char[] { '«', '»', '„', '“', '“', '”', '‘', '’', '„', '”', '"' };
+            for (int i = 0; i < wholeText.Count; i++)
+            {
+                wholeText[i] = wholeText[i].Replace("М. А.", "Булгаков");
+                wholeText[i] = wholeText[i].Replace("…", "");
+                for (int k = 0; k < quotation.Length; k++)
+                {
+                    wholeText[i] = wholeText[i].Replace(quotation[k], '"');
+                }
+            }
+
+            for (int k = 1; k < wholeText.Count; k++)
+            {
+                listBox1.Items.Add(k + "-й абзац");
+            }
+            if (listBox1.Items.Count > 0)
+            {
+                listBox1.SelectedIndex = 0;
+            }
+
+            // даты формата dd.mm.yyyy
+
+            string year = wholeText[0];
+            for (int i = 1; i < wholeText.Count; i++)
+            {
+                wholeText[i] = wholeText[i].Replace(" января", ".01." + year);
+                wholeText[i] = wholeText[i].Replace(" февраля", ".02." + year);
+                wholeText[i] = wholeText[i].Replace(" марта", ".03." + year);
+                wholeText[i] = wholeText[i].Replace(" апреля", ".04." + year);
+                wholeText[i] = wholeText[i].Replace(" мая", ".05." + year);
+                wholeText[i] = wholeText[i].Replace(" июня", ".06." + year);
+                wholeText[i] = wholeText[i].Replace(" июля", ".07." + year);
+                wholeText[i] = wholeText[i].Replace(" августа", ".08." + year);
+                wholeText[i] = wholeText[i].Replace(" сентября", ".09." + year);
+                wholeText[i] = wholeText[i].Replace(" октября", ".10." + year);
+                wholeText[i] = wholeText[i].Replace(" ноября", ".11." + year);
+                wholeText[i] = wholeText[i].Replace(" декабря", ".12." + year);
+            }
+        }
+
+        // запись в Excel
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            excel.Application.DisplayAlerts = true;
+            excel.Visible = true;
+            string tmp;
+            DateTime d = Convert.ToDateTime(listBox2.Items[0]);
+            if (listBox2.Items.Count > 1)
+            {
+                string begin = string.Format("{0}.{1}.{2}", d.Day.ToString().PadLeft(2, '0'), d.Month.ToString().PadLeft(2, '0'), d.Year.ToString().PadLeft(4, '0'));
+                d = Convert.ToDateTime(listBox2.Items[listBox2.Items.Count - 1]);
+                string end = string.Format("{0}.{1}.{2}", d.Day.ToString().PadLeft(2, '0'), d.Month.ToString().PadLeft(2, '0'), d.Year.ToString().PadLeft(4, '0'));
+                sheet.Cells[listBox1.SelectedIndex + 1, 1] = ">" + begin + " - " + end;
+            }
+            if (listBox2.Items.Count == 1)
+            {
+                string formatting = string.Format("{0}.{1}.{2}", d.Day.ToString().PadLeft(2, '0'), d.Month.ToString().PadLeft(2, '0'), d.Year.ToString().PadLeft(4, '0'));
+                sheet.Cells[listBox1.SelectedIndex + 1, 1] = ">" + formatting;
+            }
+            tmp = "!" + listBox3.Items[0].ToString() + "!";
+            for (int k = 1; k < listBox3.Items.Count; k++)
+            {
+                tmp = tmp + " !" + listBox3.Items[k] + "!";
+                sheet.Cells[listBox1.SelectedIndex + 1, 2] = tmp;
+            }            
+            for (int h = 0; h < listBox5.Items.Count; h++)
+            {
+                tmp = tmp + listBox5.Items[h];
+                sheet.Cells[listBox1.SelectedIndex + 1, 2] = tmp;
+            }
+            tmp = tmp + "\\" + listBox6.SelectedItem + "\\";
+            tmp = tmp + "*" + textBox1.Text + "*";
+            sheet.Cells[listBox1.SelectedIndex + 1, 2] = tmp;
+        }
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+            listBox6.Visible = true;
+            label6.Visible = true;
+            button1.Enabled = true;
+            button5.Enabled = true;
+            button3.Enabled = true;
+
+            textBox1.Clear();
+            listBox2.Items.Clear();
+            listBox3.Items.Clear();
+            listBox5.Items.Clear();
+            literNames.Clear();
+
+            // поиск всех дат
+
+            List<DateTime> list = new List<DateTime>();
+
+            DateTime date;
+            foreach (Match match in Regex.Matches(wholeText[listBox1.SelectedIndex + 1], @"(\d){1,2}\.(\d\d)\.(\d\d\d\d)"))
+            {
+                date = Convert.ToDateTime(match.ToString());
+                list.Add(date);
+            }
+
+            // сортировка дат
+
+            var sorted = list.OrderBy(x => x.Date).ToList();
+            foreach (var s in sorted)
+            {
+                listBox2.Items.Add(s);
+            }
+
+            // нахождение названий произведений - они в кавычках. Так как в кавычках могут быть цитаты,
+            // названия других произведений, проверяем найденное со списком всех произведений Булгакова,
+            // добавляем в файл с произведениями
+
+            string[] words1 = wholeText[listBox1.SelectedIndex + 1].Split('"');
+            foreach (Match match in Regex.Matches(wholeText[listBox1.SelectedIndex + 1], "\"([^\"]*)\""))
+            {
+                literNames.Add(match.ToString());
+            }
+
+            // Проверка и вывод
+
+            for (int i = 0; i<literNames.Count; i++)
+            {
+                literNames[i] = literNames[i].Replace("\"", "");
+                for (int j = 0; j<allTextsNew.Count; j++)
+                {
+                    if (allTextsNew[j].Contains(literNames[i]) & !listBox1.Items.Contains(literNames[i]))
+                    {
+                        listBox5.Items.Add(literNames[i]);
+                        break;
+                    }
+}
+            }
+
+            // участники
+
+            string[] words = wholeText[listBox1.SelectedIndex + 1].Split(new char[] { ' ', '.', '!', ',', '?', ';', ':', '"', '\'', '(', ')', '—' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (string s in words)
+            {
+                if (s[0] == s.ToUpper()[0] & !char.IsDigit(s[0]) & s.Length > 1 & !listBox3.Items.Contains(s))
+                {
+                    listBox3.Items.Add(s);                    
+                }
+            }
+
+            // чистка листа с участниками и произведениями
+
+            for (int k = 0; k < listBox3.Items.Count; k++)
+            {
+                for (int j = 0; j < listBox5.Items.Count; j++)
+                {
+                    if (listBox3.Items[k].ToString().Contains(listBox5.Items[j].ToString()))
+                    {
+                        listBox3.Items.RemoveAt(k);
+                    }
+                }
+            }
+
+            for (int l = 0; l < listBox5.Items.Count; l++)
+            {
+                listBox5.Items[l] = "\"" + listBox5.Items[l] + "\"";
+            }
+        }
+
+
+        // сохранение книги Excel
+
+        private void button5_Click_1(object sender, EventArgs e)
+        {
+            SaveFileDialog save = new SaveFileDialog();
+            object fileName = save.FileName;
+            if (save.ShowDialog() == DialogResult.OK)               
+            {
+                workbook.SaveAs(save.FileName);                
+            }
+            workbook.Close(false);
+        }
+    }
+}
+// Часть проекта, создающая и показывающая граф
+
+
+// Классы для вершин
+
+using System;
+namespace Khamovniki4D
+{
+    class Node
+    {
+        private string  nodeName, nodeType;
+        private int component,year;
+        public int Component
+        {
+            get { return component; }
+            set { component = value; }
+        }
+        public int Year
+        {
+            get { return year; }
+            set { year = value; }
+        }
+        public string NodeType
+        {
+            get { return nodeType; }
+            set { nodeType = value; }
+        }
+        public string NodeName
+        {
+            get { return nodeName; }
+            set { nodeName = value; }
+        }
+        public Node(string nodeType,int comp)
+        {
+            NodeType = nodeType;
+            Component = comp;
+        }
+        public override bool Equals(Object obj)
+        {
+            if (obj is Node)
+            {
+                if (obj is Manuscript && this is Manuscript) return (obj as Manuscript).name == (this as Manuscript).name && Component==(obj as Node).Component;
+                return NodeName == (obj as Node).NodeName && NodeType == (obj as Node).NodeType && (obj as Node).Year == Year && Component == (obj as Node).Component;
+            }
+            return false;
+        }
+    }
+    class Location : Node
+    {
+        public string street;
+        public Location(string street, int comp) : base("Location", comp)
+        {
+            NodeName = street;
+            this.street = street;
+        }
+    }
+    class Time : Node
+    {
+        private int day, month;
+        public int Day
+        {
+            get { return day; }
+            set { day = value; }
+        }
+        public int Month
+        {
+            get { return month; }
+            set { month = value; }
+        }
+        public Time(int d, int m, int y) : base("Time", -1)
+        {
+            Day = d;
+            Month = m;
+            Year = y;
+            NodeName = string.Format("{0}.{1}.{2}", Day.ToString().PadLeft(2, '0'), Month.ToString().PadLeft(2, '0'), Year);
+        }
+        public Time() : base("Time", -1)
+        {
+            Day = 1;
+            Month = 1;
+        }
+    }
+    class Manuscript : Node
+    {
+        public string name, ganre;
+        public Manuscript(string name, string ganre, int comp) : base("Manuscript",comp)
+        {
+            if (ganre != "")
+                NodeName = name + ", " + ganre;
+            else NodeName = name;
+            this.name = name;
+            this.ganre = ganre;
+        }
+    }
+    class Human : Node
+    {
+        public string name;
+        public Human(string name, int comp) : base("Human", comp)
+        {
+            NodeName = this.name = name;
+        }
+    }
+    class Organization : Node
+    {
+        private string name;
+        public Organization(string name, int comp) : base("Organization", comp)
+        {
+            NodeName = this.name = name;
+        }
+    }
+}
+// Класс для связей
+namespace Khamovniki4D
+{
+    class Relationship
+    {
+        string type;
+        int fromNodeInd, toNodeInd;
+        public string Type
+        {
+            get { return type; }
+            set { type = value; }
+        }
+        public int ToNodeInd
+        {
+            get { return toNodeInd; }
+            set { toNodeInd = value; }
+        }
+        public int FromNodeInd
+        {
+            get { return fromNodeInd; }
+            set { fromNodeInd = value; }
+        }
+        public Relationship(string type, int fromInd, int toInd)
+        {
+            Type = type;
+            FromNodeInd = fromInd;
+            ToNodeInd = toInd;
+        }
+        public override bool Equals(object obj)
+        {
+            if (obj is Relationship)
+            {
+                bool first = (obj as Relationship).FromNodeInd == FromNodeInd && (obj as Relationship).ToNodeInd == ToNodeInd
+                    && (obj as Relationship).Type == Type;
+                bool second = (obj as Relationship).ToNodeInd == FromNodeInd && (obj as Relationship).FromNodeInd == ToNodeInd
+                    && (obj as Relationship).Type == Type;
+                return first || second;
+            }
+            return false;
+        }
+    }
+}
+
+// Класс для работы с Neo4j
+using System;
+using Neo4jClient;
+namespace Khamovniki4D
+{
+    class Neo4jDB
+    {
+        public GraphClient client;
+        public Neo4jDB(string password, string uri = "http://localhost:7474")
+        {
+            client = new GraphClient(new Uri(uri + "/db/data"), "neo4j", password);
+        }
+        public void Connect()
+        {
+            try
+            {
+                client.Connect();
+                Console.WriteLine("Connected to Neo4j!");
+            }
+            catch (Exception error)
+            {
+                Console.WriteLine(error);
+            }
+        }
+        public void Clear()
+        {
+            client.Cypher.Match("(a)").DetachDelete("a").ExecuteWithoutResultsAsync();
+        }
+        public void CreateRelationship(string type, Node from, Node to)
+        {
+            var query = client.Cypher
+            .Match("(from:" + from.NodeType + ")", "(to:" + to.NodeType + ")")
+            .Where("from.NodeName={nodeFrom}").WithParam("nodeFrom", from.NodeName)
+            .AndWhere("from.Year={fromYear}").WithParam("fromYear", from.Year)
+            .AndWhere("from.Component={fromComponent}").WithParam("fromComponent", from.Component)
+            .AndWhere("to.NodeName={nodeTo}").WithParam("nodeTo", to.NodeName)
+            .AndWhere("to.Year={toYear}").WithParam("toYear", to.Year)
+            .AndWhere("to.Component={toComponent}").WithParam("toComponent", to.Component)
+            .Create("(from)-[:" + type + "]->(to)")
+            .ExecuteWithoutResultsAsync();
+            Console.WriteLine("Relationship {0} between node {1} and node {2} created", type, from.NodeName, to.NodeName);
+        }
+        public void AddNode(Node newNode)
+        {
+            client.Cypher.Create("(node:" + newNode.NodeType + "{ NodeName:{NodeName}, NodeType: {NodeType}, Year: {Year}, Component: {Component} })")
+            .WithParam("NodeType", newNode.NodeType).WithParam("NodeName", newNode.NodeName)
+            .WithParam("Year",newNode.Year).WithParam("Component",newNode.Component).ExecuteWithoutResults();
+            Console.WriteLine("Node {0} created", newNode.NodeName);
+        }
+    }
+}
+
+//Программа по созданию графа
+using System;
+using System.Collections.Generic;
+using System.Windows.Forms;
+using Microsoft.Office.Interop.Excel;
+using System.IO;
+using System.Text.RegularExpressions;
+namespace Khamovniki4D
+{
+	public partial class GraphCreator : Form
+	{
+    	List<Relationship> relationships;
+    	List<Node> nodes;
+    	Neo4jDB db;
+    	string serverUri, inputFile;
+    	int startInd = 2;
+    	public GraphCreator()
+    	{
+        	InitializeComponent();
+        	year.Minimum = 1925;
+        	year.Maximum = 1934;
+        	serverUri = "http://localhost:7474";
+        	OpenConnection();
+        	hint.Text = "";
+        	currentYear.Text = "Выбран " + year.Value + " год";
+        	relationships = new List<Relationship>();
+        	nodes = new List<Node>();
+        	inputFile = Directory.GetCurrentDirectory() + "\\inputs\\level3.xlsx";
+    	}
+    	private void FillGraphDB()
+    	{
+        	Node from, to;
+        	string type;
+        	foreach (Node node in nodes)
+        	{
+            	db.AddNode(node);
+        	}
+        	for (int i = 0; i < relationships.Count; ++i)
+        	{
+            	from = nodes[relationships[i].FromNodeInd];
+            	to = nodes[relationships[i].ToNodeInd];
+            	type = relationships[i].Type.Replace(" ", "_");
+            	db.CreateRelationship(type, from, to);
+        	}
+    	}
+    	private void AddNodesToList(string str, string pattern, ref List<string> nodes, ref string main_node)
+    	{
+        	try
+        	{
+            	Regex regex = new Regex(pattern);
+            	MatchCollection matches = regex.Matches(str);
+            	foreach (Match match in matches)
+            	{
+                	if (match.Value == "!Булгаков!") main_node = match.Value.TrimStart(' ').TrimEnd(' ');
+                	else nodes.Add(match.Value.TrimStart(' ').TrimEnd(' '));
+            	}
+        	}
+        	catch{}
+    	}
+    	private void AddNodesManuscript(string str, string patternManuscr, string patternGanre, ref List<string> nodes)
+    	{
+        	try
+        	{
+            	Regex regex = new Regex(patternManuscr);
+            	MatchCollection matches = regex.Matches(str);
+            	regex = new Regex(patternGanre);
+            	foreach (var match in matches)
+            	{
+                	string m = match.ToString() + "," + regex.Match(str).ToString().Replace("\\", "");
+                	nodes.Add(m.TrimStart(' ').TrimEnd(' '));
+            	}
+        	}
+        	catch{}
+    	}
+    	private Node MatchNode(string str, string year,int comp)
+    	{
+        	Node node;
+        	if (str[0] == '!')
+        	{
+            	node = new Human(str.Replace("!", ""), comp);
+        	}
+        	else if (str[0] == '|')
+        	{
+            	str = str.Replace("|", "");
+            	string[] manuscrData = str.Split(',');
+            	string name = manuscrData[0], ganre = manuscrData[1];
+            	node = new Manuscript(name, ganre, comp);
+        	}
+        	else if (str[0] == '?')
+        	{
+            	node = new Organization(str.Replace("?", ""), comp);
+        	}
+        	else if (str[0] == '/')
+        	{
+            	node = new Location(str.Replace("/", ""), comp);
+        	}
+        	else
+        	{
+            	node = new Node("None", -1);
+        	}
+        	node.Year = Convert.ToInt32(year);
+        	return node;
+    	}
+    	private void ClearString(string s, ref List<string> stringNodes, ref string mainPerson, ref string relat)
+    	{
+        	string patternPerson = @"![А-ЯЁа-яё\- ]+!", patternManusc = @"\|[А-ЯЁа-яё ]+\|", patternGanre = @"\\[\w ]+\\";
+        	string patternAddres = @"\/[А-Яа-я \.,0-9Ёё]+\/", patternOrganiz = @"\?[А-ЯЁа-яё \(\)]+\?", patternRelationsh = @"\*[А-ЯЁа-яё.,\d- ]+\*";
+        	AddNodesToList(s, patternAddres, ref stringNodes, ref mainPerson);
+        	AddNodesManuscript(s, patternManusc, patternGanre, ref stringNodes);
+        	AddNodesToList(s, patternOrganiz, ref stringNodes, ref mainPerson);
+        	AddNodesToList(s, patternPerson, ref stringNodes, ref mainPerson);
+        	Regex regex = new Regex(patternRelationsh);
+        	MatchCollection matches = regex.Matches(s);
+        	if (matches.Count > 0)
+            	relat = matches[0].Value.ToString().Replace("*", "");
+        	else relat = "lol";
+        	relat = relat.Replace(",", "").Replace("-", "");
+        	relat = relat.TrimStart(' ').TrimEnd(' ');
+        	if (relat.Length > 70) relat = "Very_Long_Relationship";
+    	}
+    	private void AddFromBulgakov(string relat, string mainPerson, string yearOfPeriod, List<string> stringNodes, string year,int comp)
+    	{
+        	Node start, cur;
+        	Relationship relation;
+        	start = MatchNode(mainPerson, yearOfPeriod, comp);
+        	if (!nodes.Contains(start))
+            	nodes.Add(start);
+        	foreach (string node in stringNodes)
+        	{
+            	cur = MatchNode(node, yearOfPeriod, comp);
+            	if (cur.NodeType == "None") continue;
+            	if (!nodes.Contains(cur))
+                	nodes.Add(cur);
+            	status.Items.Add(start.NodeName + "-[" + relat + "]-" + cur.NodeName + " ---- " + year);
+            	relation = new Relationship(relat, nodes.IndexOf(start), nodes.IndexOf(cur));
+            	if (!relationships.Contains(relation))
+                	relationships.Add(relation);
+        	}
+    	}
+    	private void AddFromAll(string relat, string yearOfPeriod, List<string> stringNodes, string year,int comp)
+    	{
+        	Node first, second;
+        	Relationship relation;
+        	for (int i = 0; i < stringNodes.Count; ++i)
+        	{
+            	for (int j = i + 1; j < stringNodes.Count; ++j)
+            	{
+                	first = MatchNode(stringNodes[i], yearOfPeriod,comp);
+                	second = MatchNode(stringNodes[j], yearOfPeriod,comp);
+                	if (first.NodeType == "None" || second.NodeType == "None") continue;
+                	if (!nodes.Contains(first))
+                    	nodes.Add(first);
+                	if (!nodes.Contains(second))
+                	{
+                    	nodes.Add(second);
+                	}
+                	status.Items.Add(first.NodeName + "-[" + relat + "]-" + second.NodeName + " --------- " + year);
+                	relation = new Relationship(relat, nodes.IndexOf(first), nodes.IndexOf(second));
+                	if (!relationships.Contains(relation))
+                    	relationships.Add(relation);
+            	}
+        	}
+    	}
+    	private void MakeRelations(string s, string yearOfPeriod,int comp)
+    	{
+        	string mainPerson = "", relat = "";
+        	List<string> stringNodes = new List<string>();
+        	ClearString(s, ref stringNodes, ref mainPerson, ref relat);
+        	if (char.IsDigit(relat[0]))
+        	{
+            	relat = 'u' + relat;
+        	}
+        	relat = relat.Replace("-", "");
+        	if (mainPerson != "")
+        	{
+            	AddFromBulgakov(relat, mainPerson, yearOfPeriod, stringNodes, yearOfPeriod, comp);
+        	}
+        	else
+        	{
+            	AddFromAll(relat, yearOfPeriod, stringNodes, yearOfPeriod,comp);
+        	}
+    	}
+    	private void SplitDate(string date, out int day, out int month, out int year)
+    	{
+        	string[] dat = date.Split('.');
+        	day = Convert.ToInt32(dat[0]);
+        	month = Convert.ToInt32(dat[1]);
+        	year = Convert.ToInt32(dat[2]);
+    	}
+    	private void FillDateInterval(string date,ref string first,ref string second)
+    	{
+        	string pattern = @"(\d{1,2}\.){2}\d{4}";
+        	Regex regex = new Regex(pattern);
+        	MatchCollection matches = regex.Matches(date);
+        	if (matches.Count < 1)
+        	{
+            	first = second = "";
+            	return;
+        	}
+        	first = second = matches[0].Value;
+        	if (matches.Count > 1)
+        	{
+            	second = matches[1].Value;
+        	}
+    	}
+    	public void CreateGraph(string year)
+    	{
+        	Microsoft.Office.Interop.Excel.Application app = new Microsoft.Office.Interop.Excel.Application();
+        	Workbook wbook = app.Workbooks.Open(inputFile);
+        	Worksheet currentSheet = wbook.Worksheets["Граф событий_драм"];
+        	Time begin = new Time(), end = new Time();
+        	int count = 0, d, m, y, comp = 0, row = 1;
+        	string cur, first = "", second = "";
+        	while (currentSheet.get_Range("A" + row).Value2 != null) row++;
+        	Range relations = currentSheet.get_Range("B" + startInd.ToString(), "B" + row.ToString());
+        	Range years = currentSheet.get_Range("A" + startInd.ToString(), "A" + row.ToString());
+        	for (int i = 0; i < relations.Count; ++i)
+        	{
+            	cur = years[i].Value.Replace("<", "").Replace(">", "");
+            	FillDateInterval(cur, ref first, ref second);
+            	if (!first.Contains(year) && !second.Contains(year)) continue;
+            	if (count == 7){
+                	count = 0;
+                	comp++;
+            	}
+            	if (count == 0 && comp==0)
+            	{
+                	SplitDate(first, out d, out m, out y);
+                	begin = new Time(d, m, y);
+            	}
+            	MakeRelations(relations[i].Value.ToString(), year,comp);
+            	if (second != "" || first != "")
+            	{
+                	SplitDate((second == "" ? first : second), out d, out m, out y);
+                	end = new Time(d, m, y);
+            	}
+            	count++;
+        	}
+        	nodes.Add(begin);
+        	nodes.Add(end);
+        	relationships.Add(new Relationship("timeline", nodes.Count - 2, nodes.Count - 1));
+        	wbook.Close();
+        	FillGraphDB();
+    	}
+    	private void Create_Click(object sender, EventArgs e)
+    	{
+        	db.Clear();
+        	nodes.Clear();
+        	relationships.Clear();
+        	status.Items.Clear();
+        	CreateGraph(year.Value.ToString().TrimStart(' ').TrimEnd(' '));
+    	}
+    	private void Go_Click(object sender, EventArgs e)
+    	{
+        	Neo4jViewer nv = new Neo4jViewer(serverUri);
+        	nv.Show();
+    	}
+    	private void Year_MouseLeave(object sender, EventArgs e)
+    	{
+        	hint.Text = "";
+    	}
+    	private void Year_MouseEnter(object sender, EventArgs e)
+    	{
+        	hint.Text = "Перемещая ползунок этого элемента можно выбрать год, по которому нужно построить граф.";
+    	}
+    	private void Create_MouseEnter(object sender, EventArgs e)
+    	{
+        	hint.Text = "Строит граф по выбранному году.";
+    	}
+    	private void Create_MouseLeave(object sender, EventArgs e)
+    	{
+        	hint.Text = "";
+    	}
+    	private void Go_MouseLeave(object sender, EventArgs e)
+    	{
+        	hint.Text = "";
+    	}
+    	private void Go_MouseEnter(object sender, EventArgs e)
+    	{
+        	hint.Text = "Открывает Neo4j браузер.";
+    	}
+    	private void ChooseUri_MouseEnter(object sender, EventArgs e)
+    	{
+        	hint.Text = "Сейчас графовая БД подключена к " + serverUri + ".";
+    	}
+    	private void ChooseUri_MouseLeave(object sender, EventArgs e)
+    	{
+        	hint.Text = "";
+    	}
+    	private void ChooseInputFile_MouseEnter(object sender, EventArgs e)
+    	{
+        	hint.Text = "Сейчас открыт " + inputFile + ".";
+    	}
+    	private void ChooseInputFile_MouseLeave(object sender, EventArgs e)
+    	{
+        	hint.Text = "";
+    	}
+    	private void ChooseInputFile_Click(object sender, EventArgs e)
+    	{
+        	openInputFile.ShowDialog();
+        	if(openInputFile.FileName!="")
+            	inputFile = openInputFile.FileName;
+    	}
+    	private void OpenConnection()
+    	{
+        	db = new Neo4jDB("root", serverUri);
+        	db.Connect();
+    	}
+    	private void ChooseUri_Click(object sender, EventArgs e)
+    	{
+        	string res = InputBox.Show("Введите URI для используемой графовой БД");
+        	if (res != "") {
+            	serverUri = res;
+            	OpenConnection();
+        	}
+    	}
+    	private void Year_Scroll(object sender, EventArgs e)
+    	{
+        	currentYear.Text = "Выбран " + year.Value + " год";
+    	}
+	}
+}
+
+// Программа для визуализации графа
+using System.Drawing;
+using System.Windows.Forms;
+using CefSharp.WinForms;
+namespace Khamovniki4D
+{
+    public partial class Neo4jViewer : Form
+    {
+        private ChromiumWebBrowser browser;
+        public Neo4jViewer(string uri= "http://localhost:7474")
+        {
+            InitializeComponent();
+            browser = new ChromiumWebBrowser(uri);
+            container.Controls.Add(browser);
+            browser.Dock = DockStyle.Fill;
+            Height = SystemInformation.PrimaryMonitorSize.Height - 30;
+            Width = SystemInformation.PrimaryMonitorSize.Width;
+            StartPosition= FormStartPosition.Manual; 
+            DesktopLocation = new Point(Width/2, 0);
+            Width = Width / 2;
+        }
+    }
+}
+	
+//Форма для ввода URI
+using System;
+using System.Windows.Forms;
+
+namespace Khamovniki4D
+{
+	public partial class InputBox : Form
+	{
+    	private static InputBox newInputBox;
+    	private static string returnString;
+    	public InputBox()
+    	{
+        	InitializeComponent();
+        	MinimumSize = MaximumSize = Size;
+    	}
+    	public static string Show(string inputBoxText)
+    	{
+        	newInputBox = new InputBox();
+        	newInputBox.description.Text = inputBoxText;
+        	newInputBox.ShowDialog();
+        	return returnString;
+    	}
+    	private void BtnOK_Click(object sender, EventArgs e)
+    	{
+        	returnString = uriInput.Text;
+        	newInputBox.Dispose();
+    	}
+    	private void BtnCancel_Click(object sender, EventArgs e)
+    	{
+        	returnString = string.Empty;
+        	newInputBox.Dispose();
+    	}
+	}
+}
+
+//Часть проекта, показывающая дополнительную информацию часть первая
+//Класс для блока информации
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace Information
+{
+    class BlockOfInfo
+    {
+        private string year;
+        public string Year
+        {
+            get { return year; }
+        }
+        private string overdata;
+        public string Overdata
+        {
+            get { return overdata; }
+        }
+        private string info;
+        public string Info
+        {
+            get { return info; }
+        }
+        private string link;
+        public string Link
+        {
+            get { return link; }
+        }
+        public BlockOfInfo(string year, string overdata, string info, string link)
+        {
+            this.year = year;
+            this.overdata = overdata;
+            this.info = info;
+            this.link = link;
+        }
+    }
+}
+
+//Программа для комментария к событию
+using System;
+using System.Windows;
+using System.Windows.Media.Imaging;
+using Microsoft.Office.Interop.Excel;
+using System.IO;
+
+namespace Information
+{
+    public partial class MainWindow : System.Windows.Window
+    {
+        Microsoft.Office.Interop.Excel.Application app;
+        BlockOfInfo[] Info;
+        Workbook wbook;
+        Sheets worksheets;
+        Range years, overdatas, smallinformation, links;
+
+        public MainWindow()
+        {
+            
+            InitializeComponent();
+            Info = new BlockOfInfo[20];
+            app = new Microsoft.Office.Interop.Excel.Application();
+            wbook = app.Workbooks.Open(Directory.GetCurrentDirectory() + "/Inforrr.xlsx");
+            worksheets = wbook.Worksheets;
+            years = ((Worksheet)worksheets["Лист1"]).get_Range("A2", "A12");
+            overdatas = ((Worksheet)worksheets["Лист1"]).get_Range("B2", "B12");
+            smallinformation = ((Worksheet)worksheets["Лист1"]).get_Range("C2", "C12");
+            links = ((Worksheet)worksheets["Лист1"]).get_Range("D2", "D12");
+
+            for (int i = 0; i < years.Count; ++i)
+            {
+                Info[i] = new BlockOfInfo(years[i].Value.ToString(), overdatas[i].Value.ToString(), smallinformation[i].Value.ToString(), links[i].Value.ToString());
+            }
+
+        }
+
+        private void g1924_Click(object sender, RoutedEventArgs e)
+        {
+            tb1.Text = "";
+            tb1.Text += g1924.Header;
+        }
+
+        private void g1925_Click(object sender, RoutedEventArgs e)
+        {
+            tb1.Text = "";
+            tb1.Text += g1925.Header;
+        }
+
+        private void g1926_Click(object sender, RoutedEventArgs e)
+        {
+            tb1.Text = "";
+            tb1.Text += g1926.Header;
+        }
+
+        private void g1927_Click(object sender, RoutedEventArgs e)
+        {
+            tb1.Text = "";
+            tb1.Text += g1927.Header;
+        }
+
+        private void g1928_Click(object sender, RoutedEventArgs e)
+        {
+            tb1.Text = "";
+            tb1.Text += g1928.Header;
+        }
+
+        private void g1929_Click(object sender, RoutedEventArgs e)
+        {
+            tb1.Text = "";
+            tb1.Text += g1929.Header;
+        }
+
+        private void g1930_Click(object sender, RoutedEventArgs e)
+        {
+            tb1.Text = "";
+            tb1.Text += g1930.Header;
+        }
+
+        private void g1931_Click(object sender, RoutedEventArgs e)
+        {
+            tb1.Text = "";
+            tb1.Text += g1931.Header;
+        }
+
+        private void g1932_Click(object sender, RoutedEventArgs e)
+        {
+            tb1.Text = "";
+            tb1.Text += g1932.Header;
+        }
+
+        private void g1933_Click(object sender, RoutedEventArgs e)
+        {
+            tb1.Text = "";
+            tb1.Text += g1933.Header;
+        }
+
+        private void g1934_Click(object sender, RoutedEventArgs e)
+        {
+            tb1.Text = "";
+            tb1.Text += g1934.Header;
+        }
+
+        private void m15_10_Click(object sender, RoutedEventArgs e)
+        {
+            tb3.Text = "";
+            tb3.Text += m15_10.Header;
+        }
+
+        private void m06_12_Click(object sender, RoutedEventArgs e)
+        {
+            tb3.Text = "";
+            tb3.Text += m06_12.Header;
+        }
+
+        private void m25_10_Click(object sender, RoutedEventArgs e)
+        {
+            tb3.Text = "";
+            tb3.Text += m25_10.Header;
+        }
+
+        private void m10_06__22_06_Click(object sender, RoutedEventArgs e)
+        {
+            tb3.Text = "";
+            tb3.Text += m10_06__22_06.Header;
+        }
+
+        private void m11_01_Click(object sender, RoutedEventArgs e)
+        {
+            tb3.Text = "";
+            tb3.Text += m11_01.Header;
+        }
+
+        private void mиюль_Click(object sender, RoutedEventArgs e)
+        {
+            tb3.Text = "";
+            tb3.Text += mиюль.Header;
+        }
+
+        private void mапрель_Click(object sender, RoutedEventArgs e)
+        {
+            tb3.Text = "";
+            tb3.Text += mапрель.Header;
+        }
+
+        private void Button_Click(object sender, RoutedEventArgs e)
+        {
+            if ( tb4.Text != "")
+            {
+                System.Diagnostics.Process.Start(tb4.Text);
+            }
+            else
+            {
+                MessageBox.Show("Ссылка отсутствует", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void m26_03_Click(object sender, RoutedEventArgs e)
+        {
+            tb3.Text = "";
+            tb3.Text += m26_03.Header;
+        }
+
+        private void m22_02_Click(object sender, RoutedEventArgs e)
+        {
+            tb3.Text = "";
+            tb3.Text += m22_02.Header;
+        }
+
+        private void m09_12_Click(object sender, RoutedEventArgs e)
+        {
+            tb3.Text = "";
+            tb3.Text += m09_12.Header;
+        }
+
+        private void b1_Click(object sender, RoutedEventArgs e)
+        {
+            
+            tb2.Text = "";
+            tb4.Text = "";
+            
+            for (int i = 0; i < years.Count; ++i)
+            {
+                if (tb1.Text == Info[i].Year && tb3.Text == Info[i].Overdata)
+                {
+                    tb2.Text = Info[i].Info;
+                    string imaging = "Resources/im" + (i+1).ToString() + ".png";
+                    imag123.Source = new BitmapImage(new Uri(@imaging, UriKind.Relative));
+                    if (Info[i].Link != "123")
+                    {
+                        tb4.Text = Info[i].Link;
+                    }
+                }
+            }
+        }        
+    }
+}
+
+//Часть проекта, показывающая дополнительную информацию часть вторая
+//Класс информационного блока о персонаже
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace Project
+{    
+    struct OneManOrWoman
+    {
+        private int id;
+        public int ID
+        {
+            get { return id; }
+        }
+        private string name;
+        public string Name
+        {
+            get { return name; }
+        }
+        private string surname;
+        public string Surname
+        {
+            get { return surname; }
+        }
+        private string thirdname;
+        public string Thirdname
+        {
+            get { return thirdname; }
+        }
+        private string character;
+        public string Character
+        {
+            get { return character; }
+        }
+        private string link;
+
+        public OneManOrWoman(int id, string name, string surname, string thirdname, string character, string link)
+        {
+            this.id = id;
+            this.name = name;
+            this.surname = surname;
+            this.thirdname = thirdname;
+            this.character = character;
+            this.link = link;
+        }
+
+        public string Link
+        {
+            get { return link; }
+        }       
+    }
+}
+
+//Программа для показа информации о персонаже
+using System;
+using System.Windows;
+using Microsoft.Office.Interop.Excel;
+using System.IO;
+using System.Windows.Media.Imaging;
+
+namespace Project
+{
+    public partial class MainWindow  : System.Windows.Window
+    {
+        Microsoft.Office.Interop.Excel.Application app;
+        OneManOrWoman[] People;
+        Workbook wbook;
+        Sheets worksheets;
+        Range names;
+        Range surnames;
+        Range thirdnames;
+        Range smallinformation;
+        Range links;
+        int flag1;
+        int kolvo;
+        string name;
+
+        public MainWindow()
+        {           
+            People = new OneManOrWoman[200];
+            app = new Microsoft.Office.Interop.Excel.Application();
+            wbook = app.Workbooks.Open(Directory.GetCurrentDirectory() + "/models2.0.xlsx");
+            worksheets = wbook.Worksheets;
+            surnames = ((Worksheet)worksheets["участники"]).get_Range("C3", "C134");
+            names = ((Worksheet)worksheets["участники"]).get_Range("D3", "D134");
+            thirdnames = ((Worksheet)worksheets["участники"]).get_Range("E3", "E134");
+            smallinformation = ((Worksheet)worksheets["участники"]).get_Range("F3", "F134");
+            links = ((Worksheet)worksheets["участники"]).get_Range("G3", "G134");
+            flag1 = 0;
+            kolvo = 0;
+            name = "";     
+
+            for (int i = 0; i < names.Count; ++i)
+            {               
+                People[i] = new OneManOrWoman(i, names[i].Value, surnames[i].Value, thirdnames[i].Value, smallinformation[i].Value, links[i].Value);
+            } 
+            
+            InitializeComponent();
+        }
+
+        private void Button123_Click(object sender, RoutedEventArgs e) // показ инфы о человеке
+        {
+            if (tb2.IsEnabled == true && tb2.Text == "Введите имя...")
+            {               
+                MessageBox.Show("Введите дополнительно имя для более точного поиска", "We need more information", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            kolvo = 0;
+            if (tb1.Text == "" || tb1.Text == "Введите фамилию...")
+            {
+                MessageBox.Show("Введите фамилию для поиска", "Errorr!", MessageBoxButton.OK, MessageBoxImage.Error);
+                if((tb2.Text == "" || tb2.Text == "Введите имя...") && flag1 == 1)
+                {
+                    MessageBox.Show("Введите имя для поиска", "Errorr!", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            
+            string  textsurname = tb1.Text;
+            string textname = tb2.Text;           
+            bool flag = false;
+            bool flagname = false;
+
+            for (int i = 0; i < names.Count; ++i)
+            {
+                
+                if (textsurname == People[i].Surname)
+                {
+                    kolvo += 1; //если одинаковые фамилии
+                    flag = true;
+                }
+            }
+            for (int i = 0; i < names.Count; ++i)
+            {
+                if (textsurname == People[i].Surname)
+                {                    
+                    if (kolvo > 1 && tb2.IsEnabled == false)
+                    {
+                        //открытие textbox с именем для полного поиска
+                        tb1.IsEnabled = false;
+                        tb2.IsEnabled = true;
+                        kolvo = 0;
+                        flag1 = 0;
+                        MessageBox.Show("Введите дополнительно имя для более точного поиска", "We need more information", MessageBoxButton.OK, MessageBoxImage.Information);
+                        
+                        break;
+                    }
+
+                    if(kolvo > 1 && tb2.IsEnabled == true)
+                    {
+                        flag1 = 1;
+                    }
+
+                    if (kolvo >= 1)
+                    {
+                        if (kolvo == 1 && flag1 == 0 && tb2.IsEnabled == false) // алгоритм если фамилия единична
+                        {
+                            string imaging = "Resources/" + People[i].Surname + People[i].Name + People[i].Thirdname + ".jpg";
+                            Photo_of_people.Source = new BitmapImage(new Uri(@imaging, UriKind.Relative));
+
+                            Info_block.Text = People[i].Character;
+                            Text_of_name.Text = People[i].Surname + " " + People[i].Name + " " + People[i].Thirdname;
+                            but1.Content = "Подробная информация";
+                        }
+
+                        else
+                        {
+                            if (flag1 == 1) // алгоритм с фамилией и именем
+                            {
+                                if (textname == People[i].Name)
+                                {
+                                    string imaging = "Resources/" + People[i].Surname + People[i].Name + People[i].Thirdname + ".jpg";
+                                    Photo_of_people.Source = new BitmapImage(new Uri(@imaging, UriKind.Relative));
+                                    name = People[i].Name;
+                                    Info_block.Text = People[i].Character;
+                                    Text_of_name.Text = People[i].Surname + " " + People[i].Name + " " + People[i].Thirdname;
+                                    but1.Content = "Подробная информация";
+                                    flagname = true;
+                                }
+                            }
+                        }
+                    }                  
+                }       
+             }
+
+
+            
+
+            if (flag == false)
+            {
+                MessageBox.Show("Введена неправильная фамилия", "Errorr!", MessageBoxButton.OK, MessageBoxImage.Error); //проверка правильности фамилии
+            }
+
+            
+
+            if (flagname == false && tb2.IsEnabled == true && tb2.Text != "Введите имя...")
+            {
+                MessageBox.Show("Введено неправильное имя", "Errorr!", MessageBoxButton.OK, MessageBoxImage.Error); // проверка правильности фамилии и имени
+            }
+
+            if(flagname == true)
+            {
+                tb2.IsEnabled = false;
+                tb1.IsEnabled = true;
+                tb2.Text = "Введите имя...";
+            }
+          
+            flag1 = 0;
+        }
+
+        private void but1_Click(object sender, RoutedEventArgs e)
+        {
+            string textsurname = tb1.Text;
+            string textname = name;
+            for (int i = 0; i < names.Count; ++i)
+            {
+                if (textsurname == People[i].Surname && kolvo == 1)
+                {
+                    System.Diagnostics.Process.Start(People[i].Link);                   
+                }
+
+                if (textsurname == People[i].Surname && kolvo>1)
+                {
+                    if (textname == People[i].Name)
+                    {
+                        System.Diagnostics.Process.Start(People[i].Link);
+                    }
+                }
+            }
+        }       
+    }
+}
